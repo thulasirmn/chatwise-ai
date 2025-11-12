@@ -42,7 +42,8 @@ export function InstagramConnect() {
         "instagram_manage_messages",
         "pages_show_list",
         "pages_read_engagement",
-        "pages_manage_metadata"
+        "pages_manage_metadata",
+        "pages_messaging"
       ];
       const scope = permissions.join(",");
       const statePayload = JSON.stringify({ ts: Date.now(), appId });

@@ -71,6 +71,30 @@ export const connectInstagramAccount = mutation({
   },
 });
 
+export const disconnectInstagram = mutation({
+  args: {
+    userId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("authId"), args.userId))
+      .first();
+
+    if (user) {
+      await ctx.db.patch(user._id, {
+        instagramAccountId: undefined,
+        instagramAccessToken: undefined,
+        instagramPageId: undefined,
+        instagramConnectedAt: undefined,
+        instagramTokenExpiresAt: undefined,
+      });
+      return user._id;
+    }
+    return null;
+  },
+});
+
 export const setFacebookApp = mutation({
   args: {
     userId: v.string(),

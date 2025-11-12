@@ -22,12 +22,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Subscribe the page to the app for Instagram webhook fields
+    // Valid fields: messages, messaging_postbacks, feed, mention (for Instagram)
     const subscribeUrl = `https://graph.facebook.com/v18.0/${user.instagramPageId}/subscribed_apps`;
     const subscribeResponse = await fetch(subscribeUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        subscribed_fields: ["messages", "messaging_postbacks", "comments", "feed"],
+        subscribed_fields: ["messages", "messaging_postbacks", "feed", "mention"],
         access_token: user.instagramAccessToken,
       }),
     });
