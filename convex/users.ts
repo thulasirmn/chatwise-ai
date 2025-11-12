@@ -18,6 +18,15 @@ export const getUser = query({
   },
 });
 
+export const getUserById = query({
+  args: {
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.userId);
+  },
+});
+
 export const getUserByInstagramId = query({
   args: { instagramAccountId: v.string() },
   handler: async (ctx, args) => {

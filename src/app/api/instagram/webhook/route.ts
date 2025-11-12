@@ -40,6 +40,7 @@ export async function POST(request: Request) {
               const recipientId = event.recipient.id;
               const senderId = event.sender.id;
               const messageText = event.message.text;
+              const messageId = event.message.mid;
 
               // Find user by Instagram account ID
               const user = await convex.query(api.users.getUserByInstagramId, { 
@@ -47,11 +48,12 @@ export async function POST(request: Request) {
               });
               
               if (user) {
-                await convex.mutation(api.instagram.processIncomingEvent, {
+                await convex.action(api.instagram.processIncomingEvent, {
                   userId: user._id,
                   type: "dm" as const,
                   content: messageText,
                   targetId: senderId,
+                  messageId: messageId,
                 });
               }
             }
@@ -72,7 +74,7 @@ export async function POST(request: Request) {
               });
               
               if (user) {
-                await convex.mutation(api.instagram.processIncomingEvent, {
+                await convex.action(api.instagram.processIncomingEvent, {
                   userId: user._id,
                   type: "comment" as const,
                   content: text,
