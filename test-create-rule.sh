@@ -1,25 +1,24 @@
 #!/bin/bash
-# Script to create a test auto-reply rule
+# Script to create a test auto-reply rule via API
 
-# You'll need to replace USER_ID with your actual Convex user _id
-# Get it from your Convex dashboard: https://dashboard.convex.dev
+PATTERN="${1:-hi}"
+REPLY="${2:-Thanks for reaching out! We will get back to you shortly.}"
+TYPE="${3:-dm}"
 
-echo "Creating test auto-reply rules..."
+echo "Creating auto-reply rule..."
+echo "  Pattern: $PATTERN"
+echo "  Reply: $REPLY"
+echo "  Type: $TYPE"
+echo ""
 
-# Example: Reply to DMs containing 'price' or 'pricing'
-echo "Rule 1: Price inquiry (DM)"
-# You'll need to call this via your app UI or Convex dashboard
+# Call the rules API (needs authentication via browser session)
+RESPONSE=$(curl -s -X POST https://ensnaringly-volcanological-yun.ngrok-free.dev/api/rules \
+  -H "Content-Type: application/json" \
+  -d "{\"pattern\":\"$PATTERN\",\"replyText\":\"$REPLY\",\"type\":\"$TYPE\"}")
 
-echo "Rule 2: Hello greeting (Comment)"
-# You'll need to call this via your app UI or Convex dashboard
+echo "Response:"
+echo "$RESPONSE" | jq '.' 2>/dev/null || echo "$RESPONSE"
 
 echo ""
-echo "To create rules, you can:"
-echo "1. Use Convex dashboard: https://dashboard.convex.dev"
-echo "2. Or create a UI component (recommended)"
-echo ""
-echo "Example rule for testing:"
-echo "  Type: dm"
-echo "  Pattern: price"
-echo "  Reply: Our prices start at $99/month. Visit our website for details!"
-echo "  Enabled: true"
+echo "To verify, check: http://localhost:3000/api/instagram/status"
+echo "You should see the rule in the 'rules' section."

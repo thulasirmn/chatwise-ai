@@ -14,6 +14,7 @@ import type * as comments from "../comments.js";
 import type * as index from "../index.js";
 import type * as instagram from "../instagram.js";
 import type * as messages from "../messages.js";
+import type * as queries from "../queries.js";
 import type * as types from "../types.js";
 import type * as users from "../users.js";
 
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   index: typeof index;
   instagram: typeof instagram;
   messages: typeof messages;
+  queries: typeof queries;
   types: typeof types;
   users: typeof users;
 }>;
