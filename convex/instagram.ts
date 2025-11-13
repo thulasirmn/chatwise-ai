@@ -54,22 +54,39 @@ export const handleWebhook = mutation({
       // Handle comments
       if (entry.changes) {
         for (const change of entry.changes) {
-          if (change.field === "comments" && change.value) {
+          console.log("📝 Change detected:", { field: change.field, hasValue: !!change.value });
+          
+          // Handle both "comments" and "live_comments" fields
+          if ((change.field === "comments" || change.field === "live_comments") && change.value) {
+            console.log("💬 Comment value:", JSON.stringify(change.value, null, 2));
+            
             const commentId = change.value.id;
             const text = change.value.text;
             const postId = change.value.media?.id;
             const authorId = change.value.from?.id;
             const authorUsername = change.value.from?.username;
+            
+            // Try to find owner ID from various possible locations
+            const ownerId = change.value.media?.owner?.id || 
+                          change.value.media?.ig_id || 
+                          entry.id;
+            
+            console.log("🔍 Looking for user with IG account ID:", ownerId);
 
             // Find user by Instagram account ID
             const user = await ctx.db
               .query("users")
               .filter((q) => 
-                q.eq(q.field("instagramAccountId"), change.value.media?.owner?.id)
+                q.eq(q.field("instagramAccountId"), ownerId)
               )
               .first();
 
-            if (!user) continue;
+            if (!user) {
+              console.log("⚠️ No user found for IG account:", ownerId);
+              continue;
+            }
+            
+            console.log("✅ User found, storing comment");
 
             // Store the comment
             await ctx.db.insert("comments", {
@@ -164,6 +181,19 @@ export const processIncomingEvent = action({
       } else {
         console.log("💬 Sending comment reply to:", args.targetId);
         await sendCommentReply(args.targetId, matched.replyText, user.instagramAccessToken);
+        // Update comment record with reply info
+        // Find the comment by userId and commentId
+        const commentDoc = await ctx.runQuery(api.comments.findByCommentId, {
+          userId: user._id,
+          commentId: args.targetId,
+        });
+        if (commentDoc) {
+          await ctx.runMutation(api.comments.updateCommentStatus, {
+            commentId: commentDoc._id,
+            status: "sent",
+            replyText: matched.replyText,
+          });
+        }
       }
       console.log("✅ Reply sent successfully!");
       return { matched: true, sent: true };
@@ -291,5 +321,102 @@ export const verifyWebhook = query({
     }
     
     return { error: "Verification failed" };
+  },
+});
+
+/**
+ * Manually sync recent media comments from IG Graph as a fallback when webhooks are unreliable in dev.
+ */
+export const syncRecentComments = action({
+  args: {
+    // Clerk authId
+    authUserId: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.runQuery(api.users.getUser, { userId: args.authUserId });
+    if (!user?.instagramAccessToken || !user.instagramAccountId) {
+      return { ok: false, reason: "not_connected" };
+    }
+
+    const accessToken = user.instagramAccessToken as string;
+    const igUserId = user.instagramAccountId as string;
+    const maxMedia = args.limit ?? 5;
+
+    // 1) Fetch recent media
+    const mediaResp = await fetch(
+      `https://graph.facebook.com/v18.0/${igUserId}/media?fields=id,caption,timestamp&limit=${maxMedia}&access_token=${encodeURIComponent(accessToken)}`
+    );
+    const mediaJson = await mediaResp.json();
+    if (!mediaResp.ok) {
+      console.error("IG media fetch failed:", mediaJson);
+      return { ok: false, reason: "media_fetch_failed", details: mediaJson };
+    }
+
+    const results: any[] = [];
+    for (const m of mediaJson.data || []) {
+      console.log("📸 Fetching comments for media:", m.id);
+      
+      // 2) For each media, fetch comments (filter out caption by requesting from field)
+      const commentsResp = await fetch(
+        `https://graph.facebook.com/v18.0/${m.id}/comments?fields=id,text,username,timestamp,from&access_token=${encodeURIComponent(accessToken)}`
+      );
+      const commentsJson = await commentsResp.json();
+      if (!commentsResp.ok) {
+        console.warn("Comments fetch failed for media", m.id, commentsJson);
+        continue;
+      }
+
+      console.log(`💬 Found ${commentsJson.data?.length || 0} comments for media ${m.id}`);
+
+      for (const c of commentsJson.data || []) {
+        console.log("🔍 Raw comment data:", { id: c.id, text: c.text?.substring(0, 80), username: c.username, from: c.from });
+        
+        // Skip if this is the media caption (check if text matches caption exactly or is very long)
+        if (c.text === m.caption || c.text?.length > 500) {
+          console.log("⏭️ Skipping caption/long text as comment");
+          continue;
+        }
+
+        console.log("💭 Processing comment:", { id: c.id, text: c.text?.substring(0, 50), username: c.username });
+
+        // Deduplicate
+        const existing = await ctx.runQuery(api.comments.findByCommentId, {
+          userId: user._id,
+          commentId: c.id,
+        });
+        if (!existing) {
+          // Store comment
+          await ctx.runMutation(api.comments.createComment, {
+            commentId: c.id,
+            postId: m.id,
+            text: c.text || "",
+            authorId: c.from?.id || "unknown",
+            authorUsername: c.username || c.from?.username || "unknown",
+            userId: user._id,
+          });
+          console.log("✅ Stored new comment:", c.id);
+        } else {
+          console.log("⏭️ Comment already exists:", c.id);
+        }
+
+        // Run auto-reply rules if any (only for new real comments, not captions)
+        try {
+          const result = await ctx.runAction(api.instagram.processIncomingEvent, {
+            userId: user._id,
+            type: "comment",
+            content: c.text || "",
+            targetId: c.id,
+          });
+          console.log("🤖 Auto-reply result:", result);
+        } catch (e) {
+          console.warn("Auto-reply (comment) failed for", c.id, e);
+        }
+
+        results.push({ mediaId: m.id, commentId: c.id, text: c.text?.substring(0, 30) });
+      }
+    }
+
+    return { ok: true, synced: results.length, items: results };
   },
 });

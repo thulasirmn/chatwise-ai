@@ -70,3 +70,21 @@ export const updateCommentStatus = mutation({
     });
   },
 });
+
+export const findByCommentId = query({
+  args: {
+    userId: v.id("users"),
+    commentId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("comments")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("userId"), args.userId),
+          q.eq(q.field("commentId"), args.commentId)
+        )
+      )
+      .first();
+  },
+});

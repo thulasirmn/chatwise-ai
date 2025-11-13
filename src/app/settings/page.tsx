@@ -8,6 +8,7 @@ export default function SettingsPage() {
   const [status, setStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [subscribing, setSubscribing] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newRule, setNewRule] = useState({ pattern: "", replyText: "", type: "dm" });
   const [message, setMessage] = useState("");
@@ -68,6 +69,25 @@ export default function SettingsPage() {
       setMessage("❌ " + err.message);
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleSyncComments = async () => {
+    setSyncing(true);
+    setMessage("");
+    try {
+      const res = await fetch("/api/instagram/sync-comments", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        setMessage(`✅ Synced ${data.result?.synced ?? 0} comments.`);
+        loadStatus();
+      } else {
+        setMessage("❌ " + (data.error || "Failed to sync comments"));
+      }
+    } catch (err: any) {
+      setMessage("❌ " + err.message);
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -184,13 +204,22 @@ export default function SettingsPage() {
           <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-4">
             Subscribe your Facebook Page to receive Instagram DM and comment events.
           </p>
-          <button
-            onClick={handleSubscribe}
-            disabled={subscribing}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-          >
-            {subscribing ? "Subscribing..." : "Subscribe Page"}
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={handleSubscribe}
+              disabled={subscribing}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            >
+              {subscribing ? "Subscribing..." : "Subscribe Page"}
+            </button>
+            <button
+              onClick={handleSyncComments}
+              disabled={syncing}
+              className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"
+            >
+              {syncing ? "Syncing comments..." : "Sync comments now"}
+            </button>
+          </div>
         </div>
 
         {/* Create Rule */}

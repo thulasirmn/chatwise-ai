@@ -21,32 +21,62 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Subscribe the page to the app for Instagram webhook fields
-    // Valid fields: messages, messaging_postbacks, feed, mention (for Instagram)
-    const subscribeUrl = `https://graph.facebook.com/v18.0/${user.instagramPageId}/subscribed_apps`;
-    const subscribeResponse = await fetch(subscribeUrl, {
+    // 1) Subscribe the PAGE for messaging events (DMs)
+    // Valid fields (page-level): messages, messaging_postbacks
+    const pageSubscribeUrl = `https://graph.facebook.com/v18.0/${user.instagramPageId}/subscribed_apps`;
+    const pageSubscribeResponse = await fetch(pageSubscribeUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        subscribed_fields: ["messages", "messaging_postbacks", "feed", "mention"],
+        subscribed_fields: ["messages", "messaging_postbacks"],
         access_token: user.instagramAccessToken,
       }),
     });
 
-    const subscribeData = await subscribeResponse.json();
+    const pageSubscribeData = await pageSubscribeResponse.json();
 
-    if (!subscribeResponse.ok) {
+    if (!pageSubscribeResponse.ok) {
       return NextResponse.json(
-        { error: "Failed to subscribe page", details: subscribeData },
+        { error: "Failed to subscribe page for messaging", details: pageSubscribeData },
         { status: 500 }
       );
     }
 
+    // 2) Subscribe the INSTAGRAM ACCOUNT for comment/mention events
+    // This is required for Instagram Graph Webhooks to deliver comments/mentions
+    const igFields = [
+      "comments",
+      "live_comments",
+      "mentions",
+      "message_reactions",
+      "message_edit",
+    ];
+    const igSubscribeUrl = `https://graph.facebook.com/v18.0/${user.instagramAccountId}/subscribed_apps`;
+    const igSubscribeResponse = await fetch(igSubscribeUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        subscribed_fields: igFields,
+        access_token: user.instagramAccessToken,
+      }),
+    });
+
+    const igSubscribeData = await igSubscribeResponse.json();
+
+    // Return success even if IG subscription endpoint is not available for your app in Dev mode.
+    // Comments/mentions delivery depends primarily on the App Dashboard Webhooks (Instagram object) being Verified & Saved.
     return NextResponse.json({
       success: true,
+      note: !igSubscribeResponse.ok
+        ? "Instagram account subscribed_apps call not available; ensure Webhooks > Instagram is Verified & Saved."
+        : undefined,
       page_id: user.instagramPageId,
-      subscribed_fields: ["messages", "messaging_postbacks", "comments", "feed"],
-      response: subscribeData,
+      instagram_account_id: user.instagramAccountId,
+      page_subscribed_fields: ["messages", "messaging_postbacks"],
+      ig_subscribed_fields: igFields,
+      page_response: pageSubscribeData,
+      ig_response: igSubscribeData,
+      ig_subscription_status: igSubscribeResponse.ok ? "ok" : "skipped",
     });
   } catch (error: any) {
     console.error("Subscribe error:", error);
