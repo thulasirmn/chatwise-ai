@@ -1,6 +1,82 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
 
+export const getStats = query({
+  args: { userId: v.string() },
+  handler: async (ctx, args) => {
+    // Find user by Clerk authId
+    const user = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("authId"), args.userId))
+      .first();
+    if (!user) return null;
+
+    // Count DMs
+    const dmCount = (await ctx.db
+      .query("messages")
+      .filter((q) => q.eq(q.field("userId"), user._id))
+      .collect()).length;
+
+    // Count comments
+    const commentCount = (await ctx.db
+      .query("comments")
+      .filter((q) => q.eq(q.field("userId"), user._id))
+      .collect()).length;
+
+    // Count auto-replies sent (messages and comments with status 'sent')
+    const autoReplyCount =
+      (await ctx.db
+        .query("messages")
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("userId"), user._id),
+            q.eq(q.field("status"), "sent")
+          )
+        )
+        .collect()).length +
+      (await ctx.db
+        .query("comments")
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("userId"), user._id),
+            q.eq(q.field("status"), "sent")
+          )
+        )
+        .collect()).length;
+
+    // Recent events: last 10 messages/comments
+    const recentMessages = await ctx.db
+      .query("messages")
+      .filter((q) => q.eq(q.field("userId"), user._id))
+      .order("desc")
+      .take(5);
+    const recentComments = await ctx.db
+      .query("comments")
+      .filter((q) => q.eq(q.field("userId"), user._id))
+      .order("desc")
+      .take(5);
+
+    const recentEvents = [
+      ...recentMessages.map((m) => ({
+        type: "DM",
+        text: m.text,
+        timestamp: m.timestamp,
+      })),
+      ...recentComments.map((c) => ({
+        type: "Comment",
+        text: c.text,
+        timestamp: c.timestamp,
+      })),
+    ].sort((a, b) => b.timestamp - a.timestamp).slice(0, 10);
+
+    return {
+      dmCount,
+      commentCount,
+      autoReplyCount,
+      recentEvents,
+    };
+  },
+});
 export const getDashboardStats = query({
   args: {},
   handler: async (ctx) => {
